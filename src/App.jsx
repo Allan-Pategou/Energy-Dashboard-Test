@@ -1,34 +1,35 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import MainLayout from './components/layout/MainLayout';
+import Dashboard from './pages/Dashboard';
+import Monitoring from './pages/Monitoring';
+import Comparison from './pages/Comparison';
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-          Dashboard Énergétique
-        </h1>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="kpi-card">
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
-              Consommation
-            </h3>
-            <p className="text-3xl font-bold text-energy-low mt-2">450 kW</p>
-          </div>
-          <div className="kpi-card">
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
-              Coût
-            </h3>
-            <p className="text-3xl font-bold text-energy-medium mt-2">1,250 €</p>
-          </div>
-          <div className="kpi-card">
-            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
-              CO₂
-            </h3>
-            <p className="text-3xl font-bold text-energy-high mt-2">180 kg</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="monitoring" element={<Monitoring />} />
+          <Route path="comparison" element={<Comparison />} />
+          <Route path="sites" element={
+            <div className="card">
+              <p className="text-gray-600 dark:text-gray-400">
+                Page Sites & Bâtiments - À développer (Jour 6)
+              </p>
+            </div>
+          } />
+          <Route path="settings" element={
+            <div className="card">
+              <p className="text-gray-600 dark:text-gray-400">
+                Page Paramètres - À développer (Jour 11)
+              </p>
+            </div>
+          } />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
