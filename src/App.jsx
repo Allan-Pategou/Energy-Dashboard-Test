@@ -3,6 +3,7 @@ import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/Dashboard';
 import Monitoring from './pages/Monitoring';
 import Comparison from './pages/Comparison';
+import TestServices from './pages/TestServices';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
               </p>
             </div>
           } />
+          <Route path="test" element={<TestServices />} />
         </Route>
       </Routes>
     </BrowserRouter>
