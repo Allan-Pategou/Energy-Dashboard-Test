@@ -54,3 +54,46 @@ body {
     @apply bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-700;
   }
 }
+
+/* Animations supplémentaires pour le dashboard */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.kpi-card {
+  animation: slideInUp 0.3s ease-out;
+}
+
+.card {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Animation pour les valeurs qui changent */
+@keyframes valueUpdate {
+  0% {
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.value-updated {
+  animation: valueUpdate 0.5s ease-out;
+}

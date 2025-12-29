@@ -239,17 +239,9 @@ export const formatVariation = (variation, inverseColors = false) => {
     };
   }
   
-  if (isPositive) {
-    return {
-      text: formatted,
-      color: 'text-energy-low',
-      icon: variation < 0 ? '↓' : '↑',
-    };
-  }
-  
   return {
     text: formatted,
-    color: 'text-energy-high',
+    color: isPositive ? 'text-energy-low' : 'text-energy-high',
     icon: variation > 0 ? '↑' : '↓',
   };
 };
