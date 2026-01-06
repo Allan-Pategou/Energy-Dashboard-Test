@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Building2, MapPin, Zap, TrendingUp } from 'lucide-react';
+import { Building2, MapPin, Zap, TrendingUp, RefreshCw } from 'lucide-react';
 import EntitySelector from '../components/navigation/EntitySelector';
 import Breadcrumb from '../components/navigation/Breadcrumb';
+import PeriodSelector from '../components/filters/PeriodSelector';
 import useEntityNavigation from '../hooks/useEntityNavigation';
 import useDashboardData from '../hooks/useDashboardData';
 import KPICard from '../components/dashboard/KPICard';
@@ -11,6 +12,7 @@ import {
   fetchZonesByBuilding 
 } from '../services/energyService';
 import { formatPower, formatCost, formatCO2 } from '../utils/formatters';
+import { differenceInDays } from 'date-fns';
 
 const Sites = () => {
   const { currentEntity, navigationPath, navigateTo } = useEntityNavigation();
@@ -19,12 +21,37 @@ const Sites = () => {
   const [zones, setZones] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Données pour l'entité courante
+  // Gestion de la période pour les KPIs
+  const [selectedPeriod, setSelectedPeriod] = useState('7d');
+  const [customPeriodRange, setCustomPeriodRange] = useState(null);
+
+  // Calcul du nombre de jours
+  const getDaysFromPeriod = (period, customRange) => {
+    if (period === 'custom' && customRange) {
+      return differenceInDays(customRange.endDate, customRange.startDate) + 1;
+    }
+    switch (period) {
+      case 'today': return 1;
+      case '7d': return 7;
+      case '30d': return 30;
+      default: return 7;
+    }
+  };
+
+  const days = getDaysFromPeriod(selectedPeriod, customPeriodRange);
+
+  // Préparer l'argument pour le hook (nombre de jours OU dates custom)
+  const hookArg = selectedPeriod === 'custom' && customPeriodRange 
+    ? customPeriodRange // Passer les dates exactes
+    : days; // Passer le nombre de jours
+
+  // Données pour l'entité courante avec période sélectionnée
   const { 
     realtimeData, 
     variations,
-    loading: dataLoading 
-  } = useDashboardData(currentEntity.id, 7);
+    loading: dataLoading,
+    refresh 
+  } = useDashboardData(currentEntity.id, hookArg);
 
   // Chargement des entités selon le niveau
   useEffect(() => {
@@ -71,16 +98,59 @@ const Sites = () => {
     navigateTo(entity);
   };
 
+  const handlePeriodChange = (period, customRange) => {
+    setSelectedPeriod(period);
+    if (period === 'custom' && customRange) {
+      setCustomPeriodRange(customRange);
+    }
+  };
+
+  const handleRefresh = () => {
+    loadEntities();
+    refresh();
+  };
+
+  // Label de la période pour l'affichage
+  const getPeriodLabel = () => {
+    switch (selectedPeriod) {
+      case 'today': return "vs hier";
+      case '7d': return "vs 7 jours préc.";
+      case '30d': return "vs 30 jours préc.";
+      case 'custom': return `vs ${days} jours préc.`;
+      default: return "vs période préc.";
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* En-tête */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Sites & Bâtiments
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Navigation dans la hiérarchie organisationnelle
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Sites & Bâtiments
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Navigation dans la hiérarchie organisationnelle
+          </p>
+        </div>
+
+        {/* Sélecteur de période et refresh */}
+        <div className="flex items-center gap-3">
+          <PeriodSelector 
+            period={selectedPeriod}
+            customRange={customPeriodRange}
+            onChange={handlePeriodChange}
+          />
+          
+          <button
+            onClick={handleRefresh}
+            disabled={loading || dataLoading}
+            className="p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 transition-colors disabled:opacity-50"
+            title="Rafraîchir"
+          >
+            <RefreshCw className={`w-5 h-5 text-gray-600 dark:text-gray-400 ${(loading || dataLoading) ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Sélecteur d'entité */}
@@ -99,33 +169,46 @@ const Sites = () => {
         />
       )}
 
-      {/* KPIs de l'entité courante */}
+      {/* KPIs de l'entité courante avec variations basées sur la période */}
       {realtimeData && !dataLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <KPICard
-            title="Consommation"
-            value={formatPower(realtimeData.instantPower)}
-            variation={variations.avgPower}
-            icon={Zap}
-            iconColor="bg-blue-500"
-            loading={dataLoading}
-          />
-          <KPICard
-            title="Coût Journalier"
-            value={formatCost(realtimeData.dailyCost)}
-            variation={variations.cost}
-            icon={TrendingUp}
-            iconColor="bg-orange-500"
-            loading={dataLoading}
-          />
-          <KPICard
-            title="Émissions CO₂"
-            value={formatCO2(realtimeData.dailyCO2)}
-            variation={variations.co2}
-            icon={TrendingUp}
-            iconColor="bg-green-500"
-            loading={dataLoading}
-          />
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Indicateurs - {currentEntity.name}
+            </h2>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Période: {days} jour{days > 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <KPICard
+              title="Consommation"
+              value={formatPower(realtimeData.instantPower)}
+              variation={variations.avgPower}
+              comparisonText={getPeriodLabel()}
+              icon={Zap}
+              iconColor="bg-blue-500"
+              loading={dataLoading}
+            />
+            <KPICard
+              title="Coût Journalier"
+              value={formatCost(realtimeData.dailyCost)}
+              variation={variations.cost}
+              comparisonText={getPeriodLabel()}
+              icon={TrendingUp}
+              iconColor="bg-orange-500"
+              loading={dataLoading}
+            />
+            <KPICard
+              title="Émissions CO₂"
+              value={formatCO2(realtimeData.dailyCO2)}
+              variation={variations.co2}
+              comparisonText={getPeriodLabel()}
+              icon={TrendingUp}
+              iconColor="bg-green-500"
+              loading={dataLoading}
+            />
+          </div>
         </div>
       )}
 

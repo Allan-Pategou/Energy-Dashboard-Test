@@ -1,38 +1,77 @@
 import { useState, useRef, useEffect } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 /**
- * Sélecteur de période pour les graphiques avec option custom
- * @param {string} period - Période sélectionnée ('today', '7d', '30d', 'custom')
- * @param {Object} customRange - Plage personnalisée {startDate, endDate}
- * @param {function} onChange - Callback lors du changement (period, customRange)
+ * Sélecteur de plage de dates avec calendrier
+ * @param {Date} startDate - Date de début
+ * @param {Date} endDate - Date de fin
+ * @param {Function} onChange - Callback ({ startDate, endDate })
  */
-const PeriodSelector = ({ period = '7d', customRange = null, onChange }) => {
+const DateRangePicker = ({ startDate, endDate, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectingStart, setSelectingStart] = useState(true);
-  const [tempStartDate, setTempStartDate] = useState(null);
-  const [tempEndDate, setTempEndDate] = useState(null);
+  const [tempStartDate, setTempStartDate] = useState(startDate);
+  const [tempEndDate, setTempEndDate] = useState(endDate);
   const dropdownRef = useRef(null);
 
-  const periods = [
-    { id: 'today', label: "Aujourd'hui", days: 1 },
-    { id: '7d', label: '7 derniers jours', days: 7 },
-    { id: '30d', label: '30 derniers jours', days: 30 },
-    { id: 'custom', label: 'Période personnalisée', days: null },
+  // Presets de dates
+  const presets = [
+    {
+      label: "Aujourd'hui",
+      getValue: () => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return { startDate: today, endDate: new Date() };
+      },
+    },
+    {
+      label: '7 derniers jours',
+      getValue: () => {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 7);
+        return { startDate: start, endDate: end };
+      },
+    },
+    {
+      label: '30 derniers jours',
+      getValue: () => {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 30);
+        return { startDate: start, endDate: end };
+      },
+    },
+    {
+      label: 'Ce mois',
+      getValue: () => {
+        const now = new Date();
+        return {
+          startDate: startOfMonth(now),
+          endDate: new Date(),
+        };
+      },
+    },
+    {
+      label: 'Mois dernier',
+      getValue: () => {
+        const lastMonth = subMonths(new Date(), 1);
+        return {
+          startDate: startOfMonth(lastMonth),
+          endDate: endOfMonth(lastMonth),
+        };
+      },
+    },
   ];
-
-  const selectedPeriod = periods.find(p => p.id === period) || periods[1];
 
   // Fermer au clic extérieur
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
-        setShowCalendar(false);
       }
     };
 
@@ -40,14 +79,14 @@ const PeriodSelector = ({ period = '7d', customRange = null, onChange }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Réinitialiser à l'ouverture du calendrier
+  // Réinitialiser les dates temporaires à l'ouverture
   useEffect(() => {
-    if (showCalendar && customRange) {
-      setTempStartDate(customRange.startDate);
-      setTempEndDate(customRange.endDate);
+    if (isOpen) {
+      setTempStartDate(startDate);
+      setTempEndDate(endDate);
       setSelectingStart(true);
     }
-  }, [showCalendar, customRange]);
+  }, [isOpen, startDate, endDate]);
 
   // Générer les jours du mois
   const getDaysInMonth = () => {
@@ -56,10 +95,11 @@ const PeriodSelector = ({ period = '7d', customRange = null, onChange }) => {
     return eachDayOfInterval({ start, end });
   };
 
-  // Générer les jours vides au début
+  // Générer les jours vides au début (pour aligner le calendrier)
   const getEmptyDays = () => {
     const firstDay = startOfMonth(currentMonth);
     const dayOfWeek = firstDay.getDay();
+    // Dimanche = 0, on veut Lundi = 0
     return dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   };
 
@@ -86,72 +126,65 @@ const PeriodSelector = ({ period = '7d', customRange = null, onChange }) => {
     return date >= tempStartDate && date <= tempEndDate;
   };
 
-  // Gérer le changement de période
-  const handlePeriodChange = (periodId) => {
-    if (periodId === 'custom') {
-      setShowCalendar(true);
-      const end = new Date();
-      const start = new Date();
-      start.setDate(start.getDate() - 7);
-      setTempStartDate(start);
-      setTempEndDate(end);
-    } else {
-      onChange(periodId, null);
-      setIsOpen(false);
-      setShowCalendar(false);
-    }
-  };
-
-  // Appliquer la période custom
-  const handleApplyCustom = () => {
+  // Appliquer la sélection
+  const handleApply = () => {
     if (tempStartDate && tempEndDate) {
-      onChange('custom', { startDate: tempStartDate, endDate: tempEndDate });
+      onChange({ startDate: tempStartDate, endDate: tempEndDate });
       setIsOpen(false);
-      setShowCalendar(false);
     }
   };
 
-  // Label affiché
-  const getDisplayLabel = () => {
-    if (period === 'custom' && customRange) {
-      return `${format(customRange.startDate, 'dd MMM', { locale: fr })} - ${format(customRange.endDate, 'dd MMM yyyy', { locale: fr })}`;
-    }
-    return selectedPeriod.label;
+  // Appliquer un preset
+  const handlePreset = (preset) => {
+    const { startDate: start, endDate: end } = preset.getValue();
+    onChange({ startDate: start, endDate: end });
+    setIsOpen(false);
+  };
+
+  // Réinitialiser
+  const handleClear = () => {
+    const today = new Date();
+    const weekAgo = new Date();
+    weekAgo.setDate(today.getDate() - 7);
+    onChange({ startDate: weekAgo, endDate: today });
+    setIsOpen(false);
   };
 
   return (
-    <div className="relative inline-block" ref={dropdownRef}>
-      <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm hover:border-blue-500 transition-colors cursor-pointer" onClick={() => setIsOpen(!isOpen)}>
+    <div className="relative" ref={dropdownRef}>
+      {/* Bouton d'ouverture */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 transition-colors"
+      >
         <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
         <span className="text-sm font-medium text-gray-900 dark:text-white">
-          {getDisplayLabel()}
+          {format(startDate, 'dd MMM', { locale: fr })} - {format(endDate, 'dd MMM yyyy', { locale: fr })}
         </span>
-        <ChevronDown className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </div>
+      </button>
 
-      {/* Dropdown */}
-      {isOpen && !showCalendar && (
-        <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 py-2">
-          {periods.map(p => (
-            <button
-              key={p.id}
-              onClick={() => handlePeriodChange(p.id)}
-              className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                p.id === period
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-semibold'
-                  : 'text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Calendrier pour période custom */}
-      {showCalendar && (
+      {/* Dropdown du calendrier */}
+      {isOpen && (
         <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-50 p-4 min-w-[320px]">
           
+          {/* Presets */}
+          <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">
+              Raccourcis
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {presets.map((preset, index) => (
+                <button
+                  key={index}
+                  onClick={() => handlePreset(preset)}
+                  className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg transition-colors text-left"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* En-tête du calendrier */}
           <div className="flex items-center justify-between mb-4">
             <button
@@ -184,10 +217,12 @@ const PeriodSelector = ({ period = '7d', customRange = null, onChange }) => {
 
           {/* Grille du calendrier */}
           <div className="grid grid-cols-7 gap-1">
+            {/* Jours vides */}
             {Array.from({ length: getEmptyDays() }).map((_, index) => (
               <div key={`empty-${index}`} />
             ))}
 
+            {/* Jours du mois */}
             {getDaysInMonth().map((day) => {
               const isStart = tempStartDate && isSameDay(day, tempStartDate);
               const isEnd = tempEndDate && isSameDay(day, tempEndDate);
@@ -218,25 +253,31 @@ const PeriodSelector = ({ period = '7d', customRange = null, onChange }) => {
           {/* Actions */}
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
             <button
-              onClick={() => {
-                setShowCalendar(false);
-                setIsOpen(false);
-              }}
+              onClick={handleClear}
               className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               <X className="w-4 h-4" />
-              Annuler
+              Réinitialiser
             </button>
 
-            <button
-              onClick={handleApplyCustom}
-              disabled={!tempStartDate || !tempEndDate}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Appliquer
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsOpen(false)}
+                className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleApply}
+                disabled={!tempStartDate || !tempEndDate}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Appliquer
+              </button>
+            </div>
           </div>
 
+          {/* Indication */}
           <p className="mt-2 text-xs text-center text-gray-500 dark:text-gray-400">
             {selectingStart ? 'Sélectionnez la date de début' : 'Sélectionnez la date de fin'}
           </p>
@@ -246,4 +287,4 @@ const PeriodSelector = ({ period = '7d', customRange = null, onChange }) => {
   );
 };
 
-export default PeriodSelector;
+export default DateRangePicker;

@@ -9,15 +9,36 @@ import { calculateVariation } from '../utils/calculations';
 /**
  * Hook personnalisé pour gérer les données du dashboard
  * @param {string} entityId - ID de l'entité (site, bâtiment)
- * @param {number} days - Nombre de jours d'historique
+ * @param {number|Object} daysOrRange - Nombre de jours OU {startDate, endDate}
  */
-const useDashboardData = (entityId = 'global', days = 7) => {
+const useDashboardData = (entityId = 'global', daysOrRange = 7) => {
   const [realtimeData, setRealtimeData] = useState(null);
   const [historyData, setHistoryData] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [previousStats, setPreviousStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  /**
+   * Calcule les dates de début et fin
+   */
+  const getDateRange = useCallback(() => {
+    // Si c'est un objet avec startDate et endDate (période custom)
+    if (typeof daysOrRange === 'object' && daysOrRange.startDate && daysOrRange.endDate) {
+      return {
+        startDate: daysOrRange.startDate,
+        endDate: daysOrRange.endDate,
+      };
+    }
+
+    // Sinon c'est un nombre de jours
+    const days = typeof daysOrRange === 'number' ? daysOrRange : 7;
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days);
+
+    return { startDate, endDate };
+  }, [daysOrRange]);
 
   /**
    * Charge les données temps réel
@@ -45,9 +66,7 @@ const useDashboardData = (entityId = 'global', days = 7) => {
    */
   const loadHistoryData = useCallback(async () => {
     try {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - days);
+      const { startDate, endDate } = getDateRange();
 
       const result = await fetchConsumptionHistory(
         entityId === 'global' ? 'site_paris' : entityId,
@@ -61,18 +80,16 @@ const useDashboardData = (entityId = 'global', days = 7) => {
     } catch (err) {
       console.error('Erreur chargement historique:', err);
     }
-  }, [entityId, days]);
+  }, [entityId, getDateRange]);
 
   /**
    * Charge les statistiques (période actuelle et précédente)
    */
   const loadStatistics = useCallback(async () => {
     try {
-      // Période actuelle
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - days);
+      const { startDate, endDate } = getDateRange();
 
+      // Période actuelle
       const currentStats = await fetchStatistics(
         entityId === 'global' ? 'site_paris' : entityId,
         startDate,
@@ -83,10 +100,12 @@ const useDashboardData = (entityId = 'global', days = 7) => {
         setStatistics(currentStats.data);
       }
 
-      // Période précédente (pour comparaison)
+      // Calculer la durée de la période
+      const duration = endDate - startDate;
+      
+      // Période précédente (même durée)
       const previousEndDate = new Date(startDate);
-      const previousStartDate = new Date(previousEndDate);
-      previousStartDate.setDate(previousEndDate.getDate() - days);
+      const previousStartDate = new Date(previousEndDate - duration);
 
       const prevStats = await fetchStatistics(
         entityId === 'global' ? 'site_paris' : entityId,
@@ -100,7 +119,7 @@ const useDashboardData = (entityId = 'global', days = 7) => {
     } catch (err) {
       console.error('Erreur chargement statistiques:', err);
     }
-  }, [entityId, days]);
+  }, [entityId, getDateRange]);
 
   /**
    * Charge toutes les données

@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Zap, DollarSign, Leaf, Gauge, RefreshCw } from 'lucide-react';
 import useDashboardData from '../hooks/useDashboardData';
 import KPICard from '../components/dashboard/KPICard';
 import ConsumptionLineChart from '../components/charts/ConsumptionLineChart';
 import PeriodSelector from '../components/filters/PeriodSelector';
+import FilterBar from '../components/filters/FilterBar';
+import { ENERGY_SOURCES } from '../data/constants';
 import { 
   formatPower, 
   formatCost, 
@@ -11,13 +13,27 @@ import {
   formatPercentage,
   formatRelativeTime 
 } from '../utils/formatters';
+import { differenceInDays } from 'date-fns';
 
 const Dashboard = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('7d');
+  const [customPeriodRange, setCustomPeriodRange] = useState(null);
   const [showSources, setShowSources] = useState(true);
   
+  // État des filtres (sans dateRange)
+  const [filters, setFilters] = useState({
+    sources: Object.keys(ENERGY_SOURCES),
+    threshold: {
+      min: 0,
+      max: 2000,
+    },
+  });
+  
   // Calcul du nombre de jours selon la période
-  const getDaysFromPeriod = (period) => {
+  const getDaysFromPeriod = (period, customRange) => {
+    if (period === 'custom' && customRange) {
+      return differenceInDays(customRange.endDate, customRange.startDate) + 1;
+    }
     switch (period) {
       case 'today': return 1;
       case '7d': return 7;
@@ -26,7 +42,12 @@ const Dashboard = () => {
     }
   };
 
-  const days = getDaysFromPeriod(selectedPeriod);
+  const days = getDaysFromPeriod(selectedPeriod, customPeriodRange);
+
+  // Préparer l'argument pour le hook (nombre de jours OU dates custom)
+  const hookArg = selectedPeriod === 'custom' && customPeriodRange 
+    ? customPeriodRange // Passer les dates exactes
+    : days; // Passer le nombre de jours
 
   // Hook personnalisé pour récupérer les données
   const { 
@@ -38,7 +59,36 @@ const Dashboard = () => {
     loading, 
     error,
     refresh 
-  } = useDashboardData('global', days);
+  } = useDashboardData('global', hookArg);
+
+  // Filtrer les données selon les sources sélectionnées
+  const filteredHistoryData = useMemo(() => {
+    if (filters.sources.length === Object.keys(ENERGY_SOURCES).length) {
+      return historyData; // Toutes les sources sélectionnées
+    }
+
+    return historyData.map(item => {
+      const filteredSources = {};
+      let filteredTotal = 0;
+
+      // Filtrer uniquement les sources sélectionnées
+      filters.sources.forEach(sourceId => {
+        if (item.sources && item.sources[sourceId] !== undefined) {
+          filteredSources[sourceId] = item.sources[sourceId];
+          // Conversion pour le gaz (m³ → kWh)
+          filteredTotal += sourceId === 'gas' 
+            ? item.sources[sourceId] * 10.3 
+            : item.sources[sourceId];
+        }
+      });
+
+      return {
+        ...item,
+        sources: filteredSources,
+        totalPower: filteredTotal,
+      };
+    });
+  }, [historyData, filters.sources]);
 
   // Gestion du rafraîchissement
   const handleRefresh = () => {
@@ -46,8 +96,11 @@ const Dashboard = () => {
   };
 
   // Gestion du changement de période
-  const handlePeriodChange = (period) => {
+  const handlePeriodChange = (period, customRange) => {
     setSelectedPeriod(period);
+    if (period === 'custom' && customRange) {
+      setCustomPeriodRange(customRange);
+    }
   };
 
   // Affichage erreur
@@ -71,36 +124,45 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       {/* En-tête avec actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Dashboard Principal
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Vue d'ensemble de la consommation énergétique
-            {realtimeData && (
-              <span className="ml-2 text-sm">
-                • Mis à jour {formatRelativeTime(realtimeData.timestamp)}
-              </span>
-            )}
-          </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Dashboard Principal
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              Vue d'ensemble de la consommation énergétique
+              {realtimeData && (
+                <span className="ml-2 text-sm">
+                  • Mis à jour {formatRelativeTime(realtimeData.timestamp)}
+                </span>
+              )}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <PeriodSelector 
+              period={selectedPeriod}
+              customRange={customPeriodRange}
+              onChange={handlePeriodChange}
+            />
+            
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className="p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 transition-colors disabled:opacity-50"
+              title="Rafraîchir"
+            >
+              <RefreshCw className={`w-5 h-5 text-gray-600 dark:text-gray-400 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <PeriodSelector 
-            period={selectedPeriod} 
-            onChange={handlePeriodChange}
-          />
-          
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="p-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-500 transition-colors disabled:opacity-50"
-            title="Rafraîchir"
-          >
-            <RefreshCw className={`w-5 h-5 text-gray-600 dark:text-gray-400 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+        {/* Barre de filtres */}
+        <FilterBar 
+          filters={filters}
+          onFiltersChange={setFilters}
+        />
       </div>
 
       {/* KPIs Grid */}
@@ -148,7 +210,7 @@ const Dashboard = () => {
         <KPICard
           title="Taux d'Utilisation"
           value={formatPercentage(utilizationRate, true, 0)}
-          variation={0} // Pas de variation pour ce KPI
+          variation={0}
           comparisonText="capacité maximale"
           icon={Gauge}
           iconColor="bg-purple-500"
@@ -171,10 +233,15 @@ const Dashboard = () => {
                   {' • '}
                   Pic: {formatPower(statistics.maxPower)}
                   {' • '}
-                  {historyData.length} points de données
+                  {filteredHistoryData.length} points de données
                 </>
               )}
             </p>
+            {filters.sources.length < Object.keys(ENERGY_SOURCES).length && (
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                📊 Filtré sur {filters.sources.length} source{filters.sources.length > 1 ? 's' : ''}
+              </p>
+            )}
           </div>
 
           {/* Toggle sources */}
@@ -196,7 +263,7 @@ const Dashboard = () => {
         </div>
 
         <ConsumptionLineChart
-          data={historyData}
+          data={filteredHistoryData}
           showSources={showSources}
           timeFormat={days === 1 ? 'hour' : 'day'}
           loading={loading}
